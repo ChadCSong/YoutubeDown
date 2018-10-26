@@ -248,7 +248,7 @@ public class YoutubeUtils {
                 streamMap.sig = value;
             }
             if (TextUtils.equals("signature", name)) {
-
+                streamMap.sig = value;
             }
             if (!TextUtils.isEmpty(streamMap.itag)) {
                 streamMap.resolution = Resolutions.get(streamMap.itag);// 下载的格式要比播放的格式多

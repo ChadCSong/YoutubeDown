@@ -19,6 +19,7 @@ import com.squareup.duktape.Duktape;
 
 import android.text.TextUtils;
 import android.util.Log;
+
 import dodola.downtube.core.entity.FmtStreamMap;
 import rx.Observable;
 import rx.Subscriber;
@@ -37,7 +38,7 @@ public class RxYoutube {
     private static final String FUNCCALL = "([$\\w]+)=([$\\w]+)\\(((?:\\w+,?)+)\\)$";
     private static final String OBJCALL = "([$\\w]+).([$\\w]+)\\(((?:\\w+,?)+)\\)$";
     private static final String[] REGEX_PRE =
-        {"*", ".", "?", "+", "$", "^", "[", "]", "(", ")", "{", "}", "|", "\\", "/"};
+            {"*", ".", "?", "+", "$", "^", "[", "]", "(", ")", "{", "}", "|", "\\", "/"};
 
     public static void fetchYoutube(final String vid, Subscriber<List<FmtStreamMap>> resultSubscriber) {
 
@@ -56,7 +57,7 @@ public class RxYoutube {
                     String pageContent = EntityUtils.toString(execute.getEntity(), "utf-8");
                     subscriber.onNext(pageContent);
                     subscriber.onCompleted();
-                } catch (Exception ex) {
+                } catch( Exception ex ) {
                     subscriber.onError(ex);
                 }
 
@@ -69,14 +70,14 @@ public class RxYoutube {
                 try {
                     Pattern jsPattern = Pattern.compile(JSPLAYER, Pattern.MULTILINE);
                     Matcher matcher = jsPattern.matcher(pageContent);
-                    if (matcher.find()) {
+                    if ( matcher.find() ) {
                         JSONObject ytplayerConfig = new JSONObject(matcher.group(1));
                         JSONObject args = ytplayerConfig.getJSONObject("args");
 
                         String html5playerJS = ytplayerConfig.getJSONObject("assets").getString("js");
-                        if (html5playerJS.startsWith("//")) {
+                        if ( html5playerJS.startsWith("//") ) {
                             html5playerJS = "http:" + html5playerJS;
-                        } else if (html5playerJS.startsWith("/")) {
+                        } else if ( html5playerJS.startsWith("/") ) {
                             html5playerJS = BASEURL + html5playerJS;
                         }
 
@@ -87,12 +88,12 @@ public class RxYoutube {
                         // 数据格式如下
 
                         List<FmtStreamMap> streamMaps = new ArrayList<FmtStreamMap>();
-                        for (String fmt : fmtArray) {
+                        for( String fmt : fmtArray ) {
                             FmtStreamMap parseFmtStreamMap = YoutubeUtils.parseFmtStreamMap(new Scanner(fmt), "utf-8");
                             parseFmtStreamMap.html5playerJS = html5playerJS;
                             parseFmtStreamMap.videoid = args.optString("video_id");
                             parseFmtStreamMap.title = args.optString("title");
-                            if (parseFmtStreamMap.resolution != null) {
+                            if ( parseFmtStreamMap.resolution != null && !TextUtils.isEmpty(parseFmtStreamMap.url) ) {
                                 streamMaps.add(parseFmtStreamMap);
                             }
                         }
@@ -102,26 +103,26 @@ public class RxYoutube {
                         String[] adaptiveStreamArray = adaptiveStream.split(",");
                         // 数据格式如下
 
-                        for (String fmt : adaptiveStreamArray) {
+                        for( String fmt : adaptiveStreamArray ) {
                             FmtStreamMap parseFmtStreamMap = YoutubeUtils.parseFmtStreamMap(new Scanner(fmt), "utf-8");
                             parseFmtStreamMap.html5playerJS = html5playerJS;
                             parseFmtStreamMap.videoid = args.optString("video_id");
                             parseFmtStreamMap.title = args.optString("title");
-                            if (parseFmtStreamMap.resolution != null) {
+                            if ( parseFmtStreamMap.resolution != null && !TextUtils.isEmpty(parseFmtStreamMap.url) ) {
                                 streamMaps.add(parseFmtStreamMap);
                             }
                         }
 
                         return streamMaps;
                     }
-                } catch (Exception ex) {
+                } catch( Exception ex ) {
                     Observable.error(ex);
                 }
                 return null;
             }
         }).subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe(resultSubscriber);
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(resultSubscriber);
     }
 
     public static void parseDownloadUrl(final FmtStreamMap fmtStreamMap, Subscriber<String> resultSubscriber) {
@@ -129,53 +130,60 @@ public class RxYoutube {
             @Override
             public void call(Subscriber<? super String> subscriber) {
                 String downloadUrl = null;
-                if (!TextUtils.isEmpty(fmtStreamMap.sig)) {
-                    String sig = fmtStreamMap.sig;
-                    downloadUrl = String.format("%s&signature=%s", fmtStreamMap.url, sig);
+                if ( !fmtStreamMap.url.contains("signature") ) {
+                    if ( !TextUtils.isEmpty(fmtStreamMap.sig) ) {
+                        String sig = fmtStreamMap.sig;
+                        downloadUrl = String.format("%s&signature=%s", fmtStreamMap.url, sig);
+                    } else {
+                        String jsContent = YoutubeUtils.getContent(fmtStreamMap.html5playerJS);
+                        downloadUrl = (decipher(jsContent, fmtStreamMap));
+                    }
                 } else {
-                    String jsContent = YoutubeUtils.getContent(fmtStreamMap.html5playerJS);
-                    downloadUrl = (decipher(jsContent, fmtStreamMap));
+                    downloadUrl = fmtStreamMap.url;
                 }
                 subscriber.onNext(downloadUrl);
                 subscriber.onCompleted();
             }
         }).subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe(resultSubscriber);
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(resultSubscriber);
     }
 
     private static String decipher(String jsContent, FmtStreamMap fmtStreamMap) {
         String f1 =
-            YoutubeUtils.getRegexString(jsContent, "\\w+\\.sig\\|\\|([$a-zA-Z]+)\\([$a-zA-Z]+\\ .[$a-zA-Z]+\\)");
-        if (TextUtils.isEmpty(f1)) {
+                YoutubeUtils.getRegexString(jsContent, "\\w+\\.sig\\|\\|([$a-zA-Z]+)\\([$a-zA-Z]+\\ .[$a-zA-Z]+\\)");
+        if ( TextUtils.isEmpty(f1) ) {
             f1 = YoutubeUtils
-                .getRegexString(jsContent,
-                    "\\w+\\.sig.*?\\?.*&&\\w+\\.set\\(\\\"signature\\\",([$a-zA-Z]+)\\([$a-zA-Z]+\\"
-                        + ".[$a-zA-Z]+\\)\\)");
+                    .getRegexString(jsContent,
+                            "\\w+\\.sig.*?\\?.*&&\\w+\\.set\\(\\\"signature\\\",([$a-zA-Z]+)\\([$a-zA-Z]+\\"
+                                    + ".[$a-zA-Z]+\\)\\)");
+        }
+        if ( TextUtils.isEmpty(f1) ) {
+            return fmtStreamMap.url;
         }
         String finalF1 = f1;
 
-        for (String aREGEX_PRE : REGEX_PRE) {
+        for( String aREGEX_PRE : REGEX_PRE ) {
 
-            if (f1.contains(aREGEX_PRE)) {
+            if ( f1.contains(aREGEX_PRE) ) {
                 finalF1 = "\\" + f1;
                 break;
             }
         }
         String f1def =
-            YoutubeUtils.getRegexString(jsContent, String.format(
-                "((function\\s+%s|[{;,]%s\\s*=\\s*function|var\\s+%s\\s*=\\s*function\\s*)\\([^)]*\\)"
-                    + "\\s*\\{[^\\{]+\\})",
-                finalF1, finalF1, finalF1));
+                YoutubeUtils.getRegexString(jsContent, String.format(
+                        "((function\\s+%s|[{;,]%s\\s*=\\s*function|var\\s+%s\\s*=\\s*function\\s*)\\([^)]*\\)"
+                                + "\\s*\\{[^\\{]+\\})",
+                        finalF1, finalF1, finalF1));
 
-        if (f1def.startsWith(",")) {
+        if ( f1def.startsWith(",") ) {
             f1def = f1def.replaceFirst(",", "");
         }
 
         StringBuilder functionSb = new StringBuilder();
         trJs(f1def, jsContent, functionSb);
 
-        if (functionSb.length() > 0) {
+        if ( functionSb.length() > 0 ) {
             String jsStr = functionSb.toString() + "\n" + String.format("%s('%s')", f1, fmtStreamMap.s);
 
             Duktape duktape = Duktape.create();
@@ -195,22 +203,22 @@ public class RxYoutube {
         Pattern funcPattern = Pattern.compile(FUNCCALL);
         Pattern objPattern = Pattern.compile(OBJCALL);
         Matcher matcher = null;
-        for (String code : split) {
+        for( String code : split ) {
             String innerFuncCall = null;
             // 判断是否为obj调用
             matcher = objPattern.matcher(code);
-            if (matcher.matches()) {// obj调用
+            if ( matcher.matches() ) {// obj调用
                 String strObj, strFuncName, strArgs;
                 strObj = matcher.group(1);
                 strFuncName = matcher.group(2);
                 strArgs = matcher.group(3);
-                if (!TextUtils.isEmpty(strObj)) {
+                if ( !TextUtils.isEmpty(strObj) ) {
                     jsfunction = jsfunction.replace(strObj + ".", "");
                 }
                 String objFunction = "(" + strFuncName + "\\s*:\\s*function\\(.*?\\)\\{[^\\{]+\\})";
                 String f1def = YoutubeUtils.getRegexString(jsContent, objFunction);
 
-                if (!TextUtils.isEmpty(f1def)) {
+                if ( !TextUtils.isEmpty(f1def) ) {
                     String objFuncMain = "function ";
                     f1def = f1def.replace(":function", "");
                     f1def = f1def.replace("}}", "}");
@@ -221,26 +229,26 @@ public class RxYoutube {
             }
 
             matcher = funcPattern.matcher(code);
-            if (matcher.matches()) {
+            if ( matcher.matches() ) {
                 String strFunName, strArgs;
                 strFunName = matcher.group(2);
-                if (!TextUtils.isEmpty(strFunName)) {
+                if ( !TextUtils.isEmpty(strFunName) ) {
                     strFunName = Pattern.quote(strFunName);
                 }
                 strArgs = matcher.group(3);
-                if (!TextUtils.isEmpty(strArgs)) {
+                if ( !TextUtils.isEmpty(strArgs) ) {
                     String[] args = strArgs.split(",");
-                    if (args.length == 1) {
+                    if ( args.length == 1 ) {
                         innerFuncCall = String.format("(function %s\\(\\w+\\)\\{[^\\{]+\\})", strFunName);
                     } else {
                         innerFuncCall = String.format("(function %s\\(", strFunName);
-                        for (int i = 0; i < args.length - 1; ++i) {
+                        for( int i = 0; i < args.length - 1; ++i ) {
                             innerFuncCall += "\\w+,";
                         }
                         innerFuncCall += "\\w+\\)\\{[^\\{]+\\})";
                     }
                 }
-                if (!TextUtils.isEmpty(innerFuncCall)) {
+                if ( !TextUtils.isEmpty(innerFuncCall) ) {
 
                     String f1def = YoutubeUtils.getRegexString(jsContent, innerFuncCall);
                     functionSb.append(f1def);
